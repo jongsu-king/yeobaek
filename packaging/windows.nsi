@@ -119,7 +119,7 @@ Section "Yeobaek"
   StrCpy $StageDir ""
 
   SetOutPath "$INSTDIR\app"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_LABEL}.lnk" "$INSTDIR\python\pythonw.exe" '-I "$INSTDIR\app\launch.py"' "$INSTDIR\app\yeobaek.ico"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_LABEL}.lnk" "$INSTDIR\python\pythonw.exe" '-B -I "$INSTDIR\app\launch.py"' "$INSTDIR\app\yeobaek.ico"
   IfErrors registration_failed
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${PRODUCT_LABEL}"
   WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"

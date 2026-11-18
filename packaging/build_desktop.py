@@ -47,9 +47,11 @@ RUNTIMES = {
     ),
 }
 
-LAUNCHER = """import os
+LAUNCHER = """import sys
+sys.dont_write_bytecode = True
+
+import os
 import runpy
-import sys
 from pathlib import Path
 
 app_dir = Path(__file__).resolve().parent
@@ -60,7 +62,10 @@ sys.path[:0] = [str(app_dir), str(app_dir / "site-packages")]
 runpy.run_path(str(app_dir / "main.py"), run_name="__main__")
 """
 
-WINDOWS_GUARD = """import ctypes
+WINDOWS_GUARD = """import sys
+sys.dont_write_bytecode = True
+
+import ctypes
 from ctypes import wintypes
 
 kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -205,7 +210,7 @@ def build_deb(stage: Path, payload: Path, output: Path, version: str, arch: str)
     executable = root / "usr/bin/yeobaek"
     executable.parent.mkdir(parents=True)
     executable.write_text(
-        '#!/bin/sh\nexec /opt/yeobaek/python/bin/python3.12 -I /opt/yeobaek/app/launch.py "$@"\n',
+        '#!/bin/sh\nexec /opt/yeobaek/python/bin/python3.12 -B -I /opt/yeobaek/app/launch.py "$@"\n',
         encoding="utf-8",
     )
     executable.chmod(stat.S_IMODE(executable.stat().st_mode) | 0o111)
@@ -249,8 +254,9 @@ def build_deb(stage: Path, payload: Path, output: Path, version: str, arch: str)
 
 
 def windows_payload_manifest(payload: Path, destination: Path) -> None:
-    files = []
-    directories = []
+    files = set()
+    directories = set()
+    cache_tag = "cpython-" + "".join(PYTHON_VERSION.split(".")[:2])
     for path in sorted(payload.rglob("*")):
         if path.is_symlink():
             raise ValueError(f"Unexpected Windows payload symlink: {path.relative_to(payload)}")
@@ -258,8 +264,16 @@ def windows_payload_manifest(payload: Path, destination: Path) -> None:
         if '"' in relative or "\n" in relative or "\r" in relative:
             raise ValueError("Invalid Windows payload path")
         collection = directories if path.is_dir() else files
-        collection.append(relative)
-    directories.sort(key=lambda path: path.count("\\"))
+        collection.add(relative)
+        if path.is_file() and path.suffix == ".py":
+            parent, _, filename = relative.rpartition("\\")
+            cache_directory = f"{parent}\\__pycache__" if parent else "__pycache__"
+            directories.add(cache_directory)
+            stem = filename[:-3]
+            for optimization in ("", ".opt-1", ".opt-2"):
+                files.add(f"{cache_directory}\\{stem}.{cache_tag}{optimization}.pyc")
+    files = sorted(files)
+    directories = sorted(directories, key=lambda path: (path.count("\\"), path))
     # Only paths compiled into this particular installer are owned by it.
     commands = (
         ("VerifyOwnedDirectories", '!insertmacro RejectReparse', directories),

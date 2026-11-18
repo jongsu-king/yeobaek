@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 import flet as ft
 
 from .drive import AuthenticationError, DriveSession
+from .exports import atomic_write_file, export_note_zip
 from .notes import (
     TEMPLATES, attachment_filename, attachment_link, attachment_links, folded,
     matches_query, parse_query, read_note, task_lines, template_note, without_attachment_links,
@@ -146,6 +147,20 @@ class Workspace:
         self.note_date = ft.Text(color=MUTED, size=11)
         self.editor_state = ft.Text(color=MUTED, size=11, expand=True)
         self.characters = ft.Text(color=MUTED, size=11)
+        self.find_status = ft.Text(color=MUTED, size=11)
+        self.find_query = ft.TextField(
+            hint_text="본문에서 찾기", dense=True, expand=True, border_color=LINE,
+            on_change=self.update_find_count, on_submit=self.handler(self.find_text),
+        )
+        self.find_bar = ft.Container(
+            ft.Row([
+                self.find_query, self.find_status,
+                icon_button(ft.Icons.KEYBOARD_ARROW_UP, "이전 일치 항목", self.handler(self.find_text, True)),
+                icon_button(ft.Icons.KEYBOARD_ARROW_DOWN, "다음 일치 항목", self.handler(self.find_text)),
+                icon_button(ft.Icons.CLOSE, "본문 찾기 닫기", self.handler(self.close_find)),
+            ], spacing=2),
+            padding=ft.Padding.symmetric(horizontal=12, vertical=6), visible=False,
+        )
         self.empty = self.empty_editor()
         self.editor = self.editor_panel()
         self.editor_host = ft.Container(expand=True, bgcolor=PAPER)
@@ -224,7 +239,7 @@ class Workspace:
             ft.Container(self.editor_header, height=54, padding=ft.Padding.symmetric(horizontal=12)),
             ft.Divider(height=1, color=LINE),
             ft.Container(self.toolbar, height=45, padding=ft.Padding.symmetric(horizontal=12)),
-            ft.Divider(height=1, color=LINE), scroll, ft.Divider(height=1, color=LINE), footer,
+            ft.Divider(height=1, color=LINE), self.find_bar, scroll, ft.Divider(height=1, color=LINE), footer,
         ], spacing=0, expand=True, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
     def empty_editor(self):
@@ -398,6 +413,7 @@ class Workspace:
         self.editor_host.content = self.editor if note else self.empty
         if note is None:
             self.close_inline_preview()
+            self.find_bar.visible = False
             return
         if load:
             heads = self.store.heads(note["id"])
@@ -453,11 +469,14 @@ class Workspace:
         self.editor_state.value = "수정 충돌 · 노트 메뉴에서 버전 보기" if conflicts else (
             "휴지통" if deleted else "이 기기에 저장됨")
         self.characters.value = f"{len(self.body.value)}자"
+        if self.find_bar.visible:
+            self.find_status.value = f"{len(self.find_matches())}곳" if self.find_query.value else ""
 
     async def select_note(self, note_id):
         if not await self.save():
             return
         self.selected_id = note_id
+        self.find_bar.visible = False
         self.previewing = False
         self.stage = "editor"
         self.change_editor()
@@ -470,6 +489,7 @@ class Workspace:
         if close_dialog:
             self.page.pop_dialog()
         self.view = view
+        self.find_bar.visible = False
         self.search.value = ""
         self.stage = "list"
         matches = self.matches()
@@ -482,6 +502,7 @@ class Workspace:
     async def back_to_list(self):
         if await self.save():
             self.stage = "list"
+            self.find_bar.visible = False
             self.update_layout()
 
     async def new_note(self, initial=None):
@@ -532,6 +553,8 @@ class Workspace:
         self.editor_state.value = "저장 중…"
         self.characters.value = f"{len(values[1])}자"
         self.page.update(self.editor_state, self.characters)
+        if self.find_bar.visible:
+            await self.update_find_count()
         self.save_task = asyncio.create_task(self.delayed_save())
 
     async def delayed_save(self):
@@ -667,8 +690,66 @@ class Workspace:
         if not await self.save():
             return
         self.previewing = not self.previewing
+        if self.previewing:
+            self.find_bar.visible = False
         self.change_editor(load=False)
         self.page.update()
+
+    def find_matches(self):
+        query = self.find_query.value or ""
+        return [match.span() for match in re.finditer(re.escape(query), self.body.value, re.IGNORECASE)] if query else []
+
+    async def update_find_count(self, _=None):
+        self.find_status.value = f"{len(self.find_matches())}곳" if self.find_query.value else ""
+        self.page.update(self.find_status)
+
+    async def show_find(self, close_dialog=False):
+        if self.note is None or not await self.save():
+            return
+        if close_dialog:
+            self.page.pop_dialog()
+        self.previewing = False
+        self.stage = "editor"
+        self.change_editor(load=False)
+        self.find_bar.visible = True
+        await self.update_find_count()
+        self.update_layout()
+        await self.find_query.focus()
+
+    async def close_find(self):
+        self.find_bar.visible = False
+        self.page.update()
+        if self.note is not None and self.body.visible:
+            await self.body.focus()
+
+    async def find_text(self, backwards=False):
+        if self.note is None or not self.find_bar.visible:
+            return
+        matches = self.find_matches()
+        if not matches:
+            await self.update_find_count()
+            return
+        note_id = self.selected_id
+        value = self.body.value
+        query = self.find_query.value
+        visible = self.find_bar.visible
+        start, end = self.body_selection()
+        if backwards:
+            index = next((index for index in range(len(matches) - 1, -1, -1)
+                          if matches[index][1] <= start), len(matches) - 1)
+        else:
+            index = next((index for index, match in enumerate(matches) if match[0] >= end), 0)
+        start, end = matches[index]
+        await self.body.focus()
+        if (self.selected_id != note_id or self.body.value != value
+                or self.find_query.value != query or self.find_bar.visible != visible):
+            return
+        self.body.selection = ft.TextSelection(
+            base_offset=len(value[:start].encode("utf-16-le")) // 2,
+            extent_offset=len(value[:end].encode("utf-16-le")) // 2,
+        )
+        self.find_status.value = f"{index + 1} / {len(matches)}"
+        self.page.update(self.body, self.find_status)
 
     def render_attachments(self):
         links = dict.fromkeys(attachment_links(self.body.value))
@@ -731,6 +812,20 @@ class Workspace:
         self.inline_preview.visible = True
         self.page.update()
 
+    def zoomable_image(self, content, label, height):
+        viewer = ft.InteractiveViewer(
+            ft.Image(src=content, height=height, fit=ft.BoxFit.CONTAIN,
+                     cache_width=2400, semantics_label=label,
+                     error_content=ft.Text("이미지 내용을 표시할 수 없어요.", color=MUTED)),
+            height=height, min_scale=1, max_scale=6, trackpad_scroll_causes_scale=True,
+        )
+        tools = [
+            icon_button(ft.Icons.ZOOM_OUT, "축소", self.handler(viewer.zoom, 0.8)),
+            icon_button(ft.Icons.ZOOM_IN, "확대", self.handler(viewer.zoom, 1.25)),
+            icon_button(ft.Icons.FIT_SCREEN, "확대 초기화", self.handler(viewer.reset)),
+        ]
+        return viewer, tools
+
     async def load_inline_preview(self, attachment, *, page=0, sheet=0, row=0, column=0):
         if self.inline_attachment is not attachment:
             return
@@ -745,11 +840,9 @@ class Workspace:
                 rendered = await asyncio.to_thread(sheet_page, attachment.name, attachment.content, sheet, row, column)
                 content = self.sheet_controls(attachment, rendered, sheet, row, column)
             elif attachment.kind == "image":
-                content = [ft.Image(
-                    src=attachment.content, height=420 if self.narrow else 580,
-                    fit=ft.BoxFit.CONTAIN, cache_width=1200,
-                    error_content=ft.Text("이미지 내용을 표시할 수 없어요.", color=MUTED),
-                )]
+                viewer, tools = self.zoomable_image(
+                    attachment.content, attachment.name, 420 if self.narrow else 580)
+                content = [ft.Row(tools, spacing=2), viewer]
             else:
                 sample = attachment.content[:64 * 1024]
                 encoding = "utf-16" if sample.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
@@ -793,8 +886,10 @@ class Workspace:
         next_page.disabled = page + 1 >= result.page_count
         navigation = ft.Row([previous, ft.Text(f"{page + 1} / {result.page_count}쪽"), next_page], spacing=4)
         if result.png:
-            body = ft.Image(src=result.png, height=450 if self.narrow else 650,
-                            fit=ft.BoxFit.CONTAIN, semantics_label=f"PDF {page + 1}쪽")
+            body, tools = self.zoomable_image(result.png, f"PDF {page + 1}쪽", 450 if self.narrow else 650)
+            if self.narrow:
+                return [navigation, ft.Row(tools, spacing=2), body]
+            navigation.controls.extend([ft.Container(expand=True), *tools])
         else:
             body = ft.Text(result.text or "이 페이지에 표시할 수 있는 텍스트가 없어요.", selectable=True)
             return [navigation, ft.Text("PDF 텍스트 미리보기", color=MUTED, size=12), body]
@@ -1062,10 +1157,23 @@ class Workspace:
             if not await self.save():
                 return
             current = self.note
+            if current is None:
+                return
             name = re.sub(r'[\\/:*?"<>|]', "_", title_of(current))
             contents = ("# " + title_of(current) + "\n\n" + current["body"]).encode()
             self.page.pop_dialog()
             await self.export_file(name + ".md", contents)
+
+        async def export_bundle():
+            if not await self.save():
+                return
+            if self.note is None:
+                return
+            current = dict(self.note)
+            name = attachment_filename(title_of(current))
+            self.page.pop_dialog()
+            contents = await asyncio.to_thread(export_note_zip, current, self.store.attachment)
+            await self.export_file(name + ".zip", contents)
 
         async def duplicate():
             if not await self.save():
@@ -1080,9 +1188,11 @@ class Workspace:
             await self.select_note(op["entity"]["id"])
 
         choices = [
+            action("본문에서 찾기", self.handler(self.show_find, True), ft.Icons.SEARCH),
             action("수정 기록", self.handler(self.history_dialog, note["id"]), ft.Icons.HISTORY),
             action("노트 복제", self.handler(duplicate), ft.Icons.CONTENT_COPY),
             action("Markdown으로 내보내기", self.handler(export_note), ft.Icons.DOWNLOAD_OUTLINED),
+            action("첨부와 함께 ZIP 내보내기", self.handler(export_bundle), ft.Icons.FOLDER_ZIP_OUTLINED),
             action("휴지통에서 복원" if note["deleted_at"] else "휴지통으로 이동",
                    self.handler(trash_or_restore), ft.Icons.RESTORE if note["deleted_at"] else ft.Icons.DELETE_OUTLINE),
         ]
@@ -1170,7 +1280,7 @@ class Workspace:
         else:
             path = await self.file_picker.save_file(file_name=name)
             if path:
-                await asyncio.to_thread(Path(path).write_bytes, content)
+                await asyncio.to_thread(atomic_write_file, path, content)
 
     async def file_content(self, file, *, limit=None):
         def too_large():
@@ -1374,10 +1484,14 @@ class Workspace:
         self.page.pop_dialog()
         if self.drive_busy:
             return
-        await asyncio.to_thread(self.drive.disconnect)
-        if self.mobile_auth:
-            await self.mobile_auth.sign_out()
-        self.set_drive_status("동기화 연결")
+        self.drive_busy = True
+        try:
+            await asyncio.to_thread(self.drive.disconnect)
+            self.set_drive_status("동기화 연결")
+            if self.mobile_auth:
+                await self.mobile_auth.sign_out()
+        finally:
+            self.drive_busy = False
 
     async def sync_now(self):
         self.set_drive_status("동기화 중…")
@@ -1433,14 +1547,25 @@ class Workspace:
                 self.drive_busy = False
 
     async def keyboard(self, event):
+        key = event.key.lower()
+        if self.find_bar.visible and key == "escape":
+            await self.close_find()
+            return
+        if self.find_bar.visible and key == "f3":
+            await self.find_text(event.shift)
+            return
         if event.ctrl or event.meta:
-            key = event.key.lower()
+            if key == "f":
+                await self.show_find()
+            if key == "g" and self.find_bar.visible:
+                await self.find_text(event.shift)
             if key == "s":
                 await self.save()
             if key == "n":
                 await self.new_note()
             if key == "k":
                 self.stage = "list"
+                self.find_bar.visible = False
                 self.update_layout()
                 await self.search.focus()
 

@@ -1,6 +1,6 @@
 [project]
 name = "yeobaek"
-version = "0.3.1"
+version = "0.4.0"
 description = "Google Drive 동기화를 지원하는 개인 노트 앱"
 requires-python = ">=3.12,<3.13"
 dependencies = [

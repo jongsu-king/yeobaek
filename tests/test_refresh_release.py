@@ -1,6 +1,7 @@
 """Release refresh failures must preserve artifacts and include added modules."""
 
 import io
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -18,6 +19,33 @@ import refresh_release as refresh
 
 
 class RefreshReleaseTests(unittest.TestCase):
+    def test_windows_uninstall_manifest_owns_only_derived_bytecode_cache_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "app/yeobaek/notes.py"
+            source.parent.mkdir(parents=True)
+            source.write_text("VALUE = 42\n")
+            (root / "app/other.txt").write_text("asset")
+            manifest = root / "manifest.nsh"
+            refresh.build_desktop.windows_payload_manifest(root / "app", manifest)
+            text = manifest.read_text()
+            for optimization in ("", ".opt-1", ".opt-2"):
+                self.assertIn(f'"${{ROOT}}\\yeobaek\\__pycache__\\notes.cpython-312{optimization}.pyc"', text)
+            self.assertIn('!insertmacro RejectReparse "${ROOT}\\yeobaek\\__pycache__"', text)
+            self.assertIn('RMDir "${ROOT}\\yeobaek\\__pycache__"', text)
+            self.assertNotIn("*", text)
+            self.assertNotIn("other.cpython", text)
+
+    def test_direct_launcher_does_not_create_bytecode_in_installation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "probe.py").write_text("import sys\nassert sys.dont_write_bytecode\nVALUE = 42\n")
+            (root / "main.py").write_text("import probe\nassert probe.VALUE == 42\n")
+            launcher = root / "launch.py"
+            launcher.write_text(refresh.build_desktop.LAUNCHER.format(app_id=refresh.APP_ID))
+            subprocess.run([sys.executable, str(launcher)], check=True)
+            self.assertFalse(list(root.rglob("__pycache__")))
+
     def test_failed_copy_keeps_previous_artifact_and_removes_partial_file(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -78,8 +106,10 @@ class RefreshReleaseTests(unittest.TestCase):
             control = b"Package: yeobaek\nVersion: 0.3.1\nArchitecture: amd64\nInstalled-Size: 100\n"
             entries = {
                 "./opt/yeobaek/app/main.py": b"OLD = True\n",
+                "./opt/yeobaek/app/launch.py": b"old launcher",
                 "./opt/yeobaek/app/yeobaek/__init__.py": b"",
                 "./opt/yeobaek/python/runtime.bin": b"native runtime remains unchanged",
+                "./usr/bin/yeobaek": b"old wrapper",
             }
             for name, contents in (("control.tar.gz", {"./control": control}), ("data.tar.gz", entries)):
                 with tarfile.open(root / name, "w:gz", format=tarfile.GNU_FORMAT) as archive:
@@ -96,6 +126,9 @@ class RefreshReleaseTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(refresh.ar_member(artifact, "data.tar.gz"))) as archive:
                 self.assertEqual(archive.extractfile("./opt/yeobaek/app/main.py").read(), b"updated main")
                 self.assertEqual(archive.extractfile("./opt/yeobaek/app/yeobaek/exports.py").read(), b"VALUE = 42")
+                self.assertTrue(archive.extractfile("./opt/yeobaek/app/launch.py").read().startswith(
+                    b"import sys\nsys.dont_write_bytecode = True\n"))
+                self.assertIn(b" -B -I ", archive.extractfile("./usr/bin/yeobaek").read())
                 self.assertEqual(archive.extractfile("./opt/yeobaek/python/runtime.bin").read(),
                                  entries["./opt/yeobaek/python/runtime.bin"])
             with tarfile.open(fileobj=io.BytesIO(refresh.ar_member(artifact, "control.tar.gz"))) as archive:

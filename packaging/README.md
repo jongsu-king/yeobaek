@@ -55,3 +55,5 @@ GitHub의 `Installer smoke tests` 워크플로는 정식 릴리스 게시 시 Wi
 ```sh
 gh workflow run installers.yml -f release_tag=v0.3.1
 ```
+
+`v0.4.0-rc.1`처럼 사전 릴리스 태그도 지정할 수 있습니다. 이때 다운로드 태그는 그대로 사용하고 설치 파일 이름과 설치 버전은 `0.4.0`으로 검사합니다.

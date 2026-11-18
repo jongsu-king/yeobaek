@@ -357,6 +357,10 @@ def linux(args, base: Path, output: Path, snapshot, version: str, arch: str) -> 
         members = ("debian-binary", "control.tar.gz", "data.tar.gz")
         (folder / "debian-binary").write_bytes(b"2.0\n")
         expected = {"./opt/yeobaek/app/" + name: data for name, data in snapshot.items() if name.endswith(".py")}
+        expected["./opt/yeobaek/app/launch.py"] = build_desktop.LAUNCHER.format(app_id=APP_ID).encode()
+        expected["./usr/bin/yeobaek"] = (
+            '#!/bin/sh\nexec /opt/yeobaek/python/bin/python3.12 -B -I /opt/yeobaek/app/launch.py "$@"\n'
+        ).encode()
         seen = set()
         size_change = 0
         payload = ar_member(base, "data.tar.gz")

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ! ${RELEASE_TAG:-} =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf 'RELEASE_TAG must be a stable version such as v0.3.1.\n' >&2
+if [[ ! ${RELEASE_TAG:-} =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-rc\.[0-9]+)?$ ]]; then
+    printf 'RELEASE_TAG must be a version such as v0.4.0 or v0.4.0-rc.1.\n' >&2
     exit 1
 fi
-release_version=${RELEASE_TAG#v}
+release_version=${BASH_REMATCH[1]}
 asset_name="yeobaek_${release_version}_amd64.deb"
 download_folder="$RUNNER_TEMP/yeobaek-release"
 fixture_folder="$RUNNER_TEMP/yeobaek-installer-data"

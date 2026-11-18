@@ -63,6 +63,9 @@ CREATE TABLE IF NOT EXISTS attachments (
     md5 TEXT NOT NULL,
     content BLOB NOT NULL
 );
+CREATE TABLE IF NOT EXISTS damaged_attachments (
+    digest TEXT PRIMARY KEY REFERENCES attachments(digest)
+);
 COMMIT;
 """
 _HEAD_FILTER = "NOT EXISTS (SELECT 1 FROM parents WHERE parents.parent_id = operations.id)"
@@ -220,6 +223,16 @@ def _record_uploads(db, account_key, op_ids):
     )
 
 
+def _store_attachments(db, records):
+    db.executemany(
+        "INSERT INTO attachments (digest, md5, content) VALUES (?, ?, ?) "
+        "ON CONFLICT (digest) DO UPDATE SET md5 = excluded.md5, content = excluded.content "
+        "WHERE attachments.md5 != excluded.md5 OR attachments.content != excluded.content",
+        records,
+    )
+    db.executemany("DELETE FROM damaged_attachments WHERE digest = ?", ((record[0],) for record in records))
+
+
 def _check_account(account_key):
     _require(bool(_checked_text(account_key, "Drive 계정 ID가 잘못되었습니다.")), "Drive 계정 ID가 없습니다.")
 
@@ -328,7 +341,7 @@ class Store:
             return
         with self._connection(write=True) as db:
             if attachment_records:
-                db.executemany("INSERT INTO attachments VALUES (?, ?, ?) ON CONFLICT DO NOTHING", attachment_records)
+                _store_attachments(db, attachment_records)
             for op in incoming:
                 previous = _get_op(db, op["id"])
                 if previous is not None:
@@ -373,21 +386,44 @@ class Store:
     def save_attachment(self, raw, *, expected_digest=None):
         record = _attachment_record(raw, expected_digest)
         with self._connection(write=True) as db:
-            db.execute("INSERT INTO attachments VALUES (?, ?, ?) ON CONFLICT DO NOTHING", record)
+            _store_attachments(db, [record])
         return record[0]
 
     def attachment(self, digest):
+        """Return verified bytes, retaining damaged rows for recovery from Drive or backup."""
+        digest = _checked_digest(digest)
         with self._connection() as db:
-            row = db.execute("SELECT content FROM attachments WHERE digest = ?", (_checked_digest(digest),)).fetchone()
-            return row[0] if row is not None else None
+            row = db.execute(
+                "SELECT content FROM attachments WHERE digest = ? AND NOT EXISTS ("
+                "SELECT 1 FROM damaged_attachments WHERE damaged_attachments.digest = attachments.digest)",
+                (digest,),
+            ).fetchone()
+        if row is None:
+            return None
+        content = row[0]
+        if isinstance(content, bytes) and hashlib.sha256(content).hexdigest() == digest:
+            return content
+        with self._connection(write=True) as db:
+            # A validated import or Drive download may have repaired it since this read.
+            db.execute(
+                "INSERT OR IGNORE INTO damaged_attachments (digest) "
+                "SELECT digest FROM attachments WHERE digest = ? AND content = ?",
+                (digest, content),
+            )
+        return None
 
     def attachment_hashes(self):
+        """List stored hashes, including damaged rows retained for recovery."""
         with self._connection() as db:
             return [digest for (digest,) in db.execute("SELECT digest FROM attachments ORDER BY digest")]
 
     def attachment_checksums(self):
+        """List available files without rehashing the entire attachment library."""
         with self._connection() as db:
-            return dict(db.execute("SELECT digest, md5 FROM attachments"))
+            return dict(db.execute(
+                "SELECT digest, md5 FROM attachments WHERE NOT EXISTS ("
+                "SELECT 1 FROM damaged_attachments WHERE damaged_attachments.digest = attachments.digest)"
+            ))
 
     def referenced_attachments(self):
         """Find attachments in every revision so restoring earlier notes restores their links."""

@@ -1,10 +1,11 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
-    throw 'RELEASE_TAG must be a stable version such as v0.3.1.'
+$releaseMatch = [regex]::Match($env:RELEASE_TAG, '^v(?<version>\d+\.\d+\.\d+)(?:-rc\.\d+)?$')
+if (-not $releaseMatch.Success) {
+    throw 'RELEASE_TAG must be a version such as v0.4.0 or v0.4.0-rc.1.'
 }
-$releaseVersion = $env:RELEASE_TAG.Substring(1)
+$releaseVersion = $releaseMatch.Groups['version'].Value
 $assetName = "Yeobaek-$releaseVersion-Windows-x64-Setup.exe"
 $downloadFolder = Join-Path $env:RUNNER_TEMP 'yeobaek-release'
 $fixtureFolder = Join-Path $env:RUNNER_TEMP 'yeobaek-installer-data'
@@ -76,6 +77,18 @@ try {
 } finally {
     if ($null -ne $client -and -not $client.HasExited) { $client.Kill() }
     if (-not $backend.HasExited) { $backend.Kill($true) }
+}
+
+if ([Version]$releaseVersion -ge [Version]'0.4.0') {
+    $cacheProbe = @'
+import pathlib, py_compile, sys
+source = pathlib.Path(sys.argv[1]) / "yeobaek/notes.py"
+generated = py_compile.compile(str(source), doraise=True)
+assert pathlib.Path(generated).is_file()
+print("Created a known legacy Python cache file for targeted uninstall verification.")
+'@
+    & $bundledPython -B -I -c $cacheProbe (Join-Path $installation 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Legacy cache probe failed.' }
 }
 
 Uninstall-Yeobaek
