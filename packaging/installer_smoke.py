@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -67,7 +68,8 @@ def check_installed(args):
         note = store.put("note", {"title": TITLE, "body": attachment_link("fixture.bin", digest)})
         receipt_file.write_text(json.dumps({"note_id": note["entity"]["id"], "digest": digest}))
     receipt = json.loads(receipt_file.read_text())
-    assert any(note["id"] == receipt["note_id"] and note["title"] == TITLE for note in store.notes())
+    fixture_note = next(note for note in store.notes() if note["id"] == receipt["note_id"])
+    assert fixture_note["title"] == TITLE
     assert store.attachment(receipt["digest"]) == PAYLOAD
     assert hashlib.sha256(PAYLOAD).hexdigest() == receipt["digest"]
 
@@ -82,6 +84,29 @@ def check_installed(args):
     cells = sheet_page("fixture.xlsx", excel.getvalue())
     assert cells.rows[1] == ("Fixture", "1.25") and cells.rows[2][1] == "=B2*2"
     print("Verified installed app source, SQLite, binary attachment, PDFium PNG and Excel preview.")
+    exports_present = (app / "yeobaek/exports.py").is_file()
+    release_tag = os.environ.get("RELEASE_TAG")
+    if release_tag:
+        release_version = tuple(int(part) for part in release_tag.removeprefix("v").split("-", 1)[0].split("."))
+        if release_version >= (0, 4, 0):
+            assert exports_present, "This release must include the portable exports module."
+    if exports_present:
+        import zipfile
+        import yeobaek.exports as exports
+
+        assert Path(exports.__file__).resolve().is_relative_to(app)
+        portable = exports.export_note_zip(fixture_note, store.attachment)
+        destination = f"attachments/{receipt['digest']}-fixture.bin"
+        with zipfile.ZipFile(io.BytesIO(portable)) as archive:
+            assert set(archive.namelist()) == {"note.md", destination}
+            assert archive.read(destination) == PAYLOAD
+            markdown = archive.read("note.md").decode("utf-8")
+            assert f"[fixture.bin]({destination})" in markdown
+        output = args.data / "fixture-note.zip"
+        output.write_bytes(b"previous synthetic export")
+        exports.atomic_write_file(output, portable)
+        assert output.read_bytes() == portable
+        print("Verified installed portable ZIP relative link, original binary attachment and atomic file replacement.")
 
 
 def main():
