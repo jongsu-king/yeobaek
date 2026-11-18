@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -116,8 +116,9 @@ class StoreIntegrityTests(unittest.TestCase):
         self.assertEqual(store.operations(), [child])
 
     def corrupt_attachment(self, store, digest):
-        with sqlite3.connect(store.path) as db:
-            db.execute("UPDATE attachments SET content = ? WHERE digest = ?", (b"damaged stored bytes", digest))
+        with closing(sqlite3.connect(store.path)) as db:
+            with db:
+                db.execute("UPDATE attachments SET content = ? WHERE digest = ?", (b"damaged stored bytes", digest))
 
     def test_corrupt_attachment_is_preserved_but_excluded_from_available_files(self):
         store = self.store("corrupt")
@@ -125,7 +126,7 @@ class StoreIntegrityTests(unittest.TestCase):
         self.corrupt_attachment(store, digest)
         self.assertIsNone(store.attachment(digest))
         self.assertNotIn(digest, store.attachment_checksums())
-        with sqlite3.connect(store.path) as db:
+        with closing(sqlite3.connect(store.path)) as db:
             content = db.execute("SELECT content FROM attachments WHERE digest = ?", (digest,)).fetchone()[0]
         self.assertEqual(content, b"damaged stored bytes")
         with mock.patch("yeobaek.store.hashlib.sha256", side_effect=AssertionError("already quarantined")):
@@ -161,7 +162,7 @@ class StoreIntegrityTests(unittest.TestCase):
         self.assertIsNone(store.attachment(digest))
         self.assertNotIn(digest, store.attachment_checksums())
         self.assertEqual(store.operations(), [original])
-        with sqlite3.connect(store.path) as db:
+        with closing(sqlite3.connect(store.path)) as db:
             value = db.execute("SELECT content FROM attachments WHERE digest = ?", (digest,)).fetchone()[0]
         self.assertEqual(value, b"damaged stored bytes")
 
@@ -193,8 +194,9 @@ class StoreIntegrityTests(unittest.TestCase):
         content = b"existing attachment"
         digest = store.save_attachment(content)
         original = store.put("note", {"body": attachment_link("file.bin", digest)})
-        with sqlite3.connect(store.path) as db:
-            db.execute("DROP TABLE damaged_attachments")
+        with closing(sqlite3.connect(store.path)) as db:
+            with db:
+                db.execute("DROP TABLE damaged_attachments")
         reopened = Store(store.path)
         self.assertEqual(reopened.operations(), [original])
         self.assertEqual(reopened.attachment(digest), content)

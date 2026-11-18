@@ -3,6 +3,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
@@ -180,8 +181,9 @@ class SynchronizationIntegrityTests(unittest.TestCase):
         source_session.sync()
         replica, replica_session = self.device("replica")
         replica_session.sync()
-        with sqlite3.connect(replica.path) as db:
-            db.execute("UPDATE attachments SET content = ? WHERE digest = ?", (b"damaged local bytes", digest))
+        with closing(sqlite3.connect(replica.path)) as db:
+            with db:
+                db.execute("UPDATE attachments SET content = ? WHERE digest = ?", (b"damaged local bytes", digest))
         self.assertIsNone(replica.attachment(digest))
         self.assertNotIn(digest, replica.attachment_checksums())
         self.assertEqual(replica_session.sync().unreadable, 0)
