@@ -1,0 +1,15 @@
+name: yeobaek_mobile_auth
+description: Native Google Drive authorization and PDF preview for Yeobaek
+version: 0.2.0
+publish_to: none
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flet: 1.1.2
+  google_sign_in: ^7.2.0
+  path_provider: ^2.1.6
+  pdfx: 2.11.0

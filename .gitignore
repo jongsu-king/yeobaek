@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+*.sqlite3*
+assets/mobile_oauth.json
+client_secret*.json
+*.keystore
+*.jks
+.env
+.env.*

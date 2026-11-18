@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yeobaek-mobile-auth"
+version = "0.2.0"
+description = "Google Drive authorization and PDF preview services for Yeobaek on Android and iOS"
+requires-python = ">=3.10"
+dependencies = ["flet==1.1.2"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"flutter.yeobaek_mobile_auth" = ["pubspec.yaml", "lib/*.dart", "lib/src/*.dart"]

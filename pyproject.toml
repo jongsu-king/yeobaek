@@ -1,0 +1,46 @@
+[project]
+name = "yeobaek"
+version = "0.3.0"
+description = "Google Drive 동기화를 지원하는 개인 노트 앱"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flet==1.1.2",
+    "certifi>=2026.2.25",
+    "pypdf==6.21.4",
+    "openpyxl==3.1.5",
+    "xlrd==2.0.2",
+    "defusedxml==0.7.1",
+]
+
+[project.optional-dependencies]
+desktop-preview = ["pypdfium2==5.15.2"]
+
+[dependency-groups]
+dev = ["flet[cli,desktop]==1.1.2"]
+
+[tool.flet]
+org = "io.github.jongsuking"
+product = "Yeobaek"
+company = "Yeobaek"
+
+[tool.flet.app]
+path = "."
+exclude = [".venv", "mobile_auth", "packaging", "build", "dist", ".git", "client_secret*.json", "__pycache__"]
+
+[tool.flet.android]
+dependencies = ["yeobaek-mobile-auth"]
+
+[tool.flet.android.dev_packages]
+yeobaek-mobile-auth = "mobile_auth"
+
+[tool.flet.ios]
+dependencies = ["yeobaek-mobile-auth"]
+
+[tool.flet.ios.dev_packages]
+yeobaek-mobile-auth = "mobile_auth"
+
+[tool.flet.ios.info]
+GIDClientID = "441095640022-4igtau1i5jlnmh4sg7r92r1khnmq7lqa.apps.googleusercontent.com"
+CFBundleURLTypes = [
+    { CFBundleTypeRole = "Editor", CFBundleURLSchemes = ["com.googleusercontent.apps.441095640022-4igtau1i5jlnmh4sg7r92r1khnmq7lqa"] },
+]
