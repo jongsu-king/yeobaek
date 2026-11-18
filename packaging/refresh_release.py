@@ -14,6 +14,7 @@ import importlib.util
 import io
 import json
 import marshal
+import os
 import plistlib
 import re
 import shutil
@@ -41,6 +42,45 @@ def run(command, **kwargs):
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def publish(source: Path, destination: Path) -> Path:
+    """Replace a release file only after a complete sibling copy is on disk."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=f".{destination.name}.", suffix=".partial",
+                                         dir=destination.parent, delete=False) as staged:
+            temporary = Path(staged.name)
+            with source.open("rb") as original:
+                shutil.copyfileobj(original, staged)
+            staged.flush()
+            os.fsync(staged.fileno())
+        shutil.copymode(source, temporary)
+        temporary.replace(destination)
+        return destination
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def new_python_module(name: str, *, bytecode=False) -> bool:
+    path = Path(name)
+    return (not path.is_absolute() and ".." not in path.parts
+            and name.startswith("yeobaek/") and name.endswith(".pyc" if bytecode else ".py"))
+
+
+def write_app_files(folder: Path, replacements: dict[str, bytes], *, bytecode=False):
+    for name, data in replacements.items():
+        destination = folder / name
+        if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+            raise ValueError(f"Expected a regular app file: {name}")
+        if not destination.exists() and not new_python_module(name, bytecode=bytecode):
+            raise ValueError(f"Expected app file missing from baseline: {name}")
+        if bytecode and destination.exists() and name.endswith(".pyc"):
+            if destination.read_bytes()[:4] != importlib.util.MAGIC_NUMBER:
+                raise ValueError("Use Python 3.12 to refresh this release.")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
 
 
 def ar_member(archive: Path, name: str) -> bytes:
@@ -89,12 +129,13 @@ def mobile_snapshot(snapshot: dict[str, bytes]) -> dict[str, bytes]:
     }
 
 
-def rewrite_zip(data: bytes, replacements: dict[str, bytes], *, strip_signatures=False) -> bytes:
+def rewrite_zip(data: bytes, replacements: dict[str, bytes], *, strip_signatures=False,
+                add_python_modules=False) -> bytes:
     output = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(data)) as original, zipfile.ZipFile(output, "w") as refreshed:
         names = set(original.namelist())
         missing = replacements.keys() - names
-        if missing:
+        if missing and not (add_python_modules and all(new_python_module(name, bytecode=True) for name in missing)):
             raise ValueError(f"Baseline ZIP is missing expected entries: {sorted(missing)}")
         for member in original.infolist():
             signed = member.filename.startswith("META-INF/") and (
@@ -110,6 +151,10 @@ def rewrite_zip(data: bytes, replacements: dict[str, bytes], *, strip_signatures
                 if original.read(member)[:4] != importlib.util.MAGIC_NUMBER:
                     raise ValueError("Use Python 3.12 to refresh this release.")
             refreshed.writestr(copy.copy(member), raw)
+        for name in sorted(missing):
+            member = zipfile.ZipInfo(name)
+            member.external_attr = 0o100644 << 16
+            refreshed.writestr(member, replacements[name])
     return output.getvalue()
 
 
@@ -237,7 +282,7 @@ def android(args, base: Path, output: Path, snapshot, version: str) -> Path:
     signer = str(tools / "apksigner")
     baseline = run([signer, "verify", "--print-certs", str(base)], capture_output=True, text=True).stdout
     with zipfile.ZipFile(base) as archive:
-        app = rewrite_zip(archive.read("assets/app.zip"), mobile_snapshot(snapshot))
+        app = rewrite_zip(archive.read("assets/app.zip"), mobile_snapshot(snapshot), add_python_modules=True)
         extension = "yeobaek_mobile_auth/__init__.pyc"
         source = PROJECT / "mobile_auth/src/yeobaek_mobile_auth/__init__.py"
         site = rewrite_zip(archive.read("assets/sitepackages.zip"), {extension: compiled(source.read_bytes(), extension[:-1])})
@@ -271,8 +316,7 @@ def android(args, base: Path, output: Path, snapshot, version: str) -> Path:
                     if app_zip.read(name) != raw:
                         raise ValueError(f"Android packaged source mismatch: {name}")
         destination = output / f"Yeobaek-{version}-Android-arm64.apk"
-        shutil.move(signed, destination)
-        return destination
+        return publish(signed, destination)
 
 
 def ios_simulator(args, base: Path, output: Path, snapshot, version: str) -> Path:
@@ -281,13 +325,7 @@ def ios_simulator(args, base: Path, output: Path, snapshot, version: str) -> Pat
         run(["ditto", "-x", "-k", str(base), str(folder)])
         app = folder / "yeobaek.app"
         bundle = app / IOS_RESOURCE
-        for name, data in mobile_snapshot(snapshot).items():
-            destination = bundle / "app" / name
-            if not destination.is_file() or destination.is_symlink():
-                raise ValueError(f"Expected iOS app file missing: {name}")
-            if name.endswith(".pyc") and destination.read_bytes()[:4] != importlib.util.MAGIC_NUMBER:
-                raise ValueError("Use Python 3.12 to refresh the iOS release.")
-            destination.write_bytes(data)
+        write_app_files(bundle / "app", mobile_snapshot(snapshot), bytecode=True)
         extension = bundle / "site-packages/yeobaek_mobile_auth/__init__.pyc"
         source = PROJECT / "mobile_auth/src/yeobaek_mobile_auth/__init__.py"
         extension.write_bytes(compiled(source.read_bytes(), "yeobaek_mobile_auth/__init__.py"))
@@ -310,8 +348,7 @@ def ios_simulator(args, base: Path, output: Path, snapshot, version: str) -> Pat
             for name, data in mobile_snapshot(snapshot).items():
                 if archive.read(f"yeobaek.app/{IOS_RESOURCE}/app/{name}") != data:
                     raise ValueError(f"iOS packaged source mismatch: {name}")
-        shutil.move(temporary, destination)
-        return destination
+        return publish(temporary, destination)
 
 
 def linux(args, base: Path, output: Path, snapshot, version: str, arch: str) -> Path:
@@ -337,8 +374,18 @@ def linux(args, base: Path, output: Path, snapshot, version: str, arch: str) -> 
                 member.size = len(raw)
                 refreshed.addfile(member, io.BytesIO(raw))
                 seen.add(member.name)
-        if seen != expected.keys():
-            raise ValueError(f"Linux source files missing from baseline: {sorted(expected.keys() - seen)}")
+            for name in sorted(expected.keys() - seen):
+                relative = name.removeprefix("./opt/yeobaek/app/")
+                if not new_python_module(relative):
+                    raise ValueError(f"Linux source file missing from baseline: {name}")
+                raw = expected[name]
+                member = tarfile.TarInfo(name)
+                member.uid = member.gid = 0
+                member.uname = member.gname = "root"
+                member.mode = 0o644
+                member.size = len(raw)
+                refreshed.addfile(member, io.BytesIO(raw))
+                size_change += len(raw)
         control = ar_member(base, "control.tar.gz")
         with tarfile.open(fileobj=io.BytesIO(control), mode="r:gz") as original, tarfile.open(
             folder / "control.tar.gz", "w:gz", format=tarfile.GNU_FORMAT,
@@ -362,8 +409,7 @@ def linux(args, base: Path, output: Path, snapshot, version: str, arch: str) -> 
         destination = output / f"yeobaek_{version}_{arch}.deb"
         temporary = folder / destination.name
         write_ar(temporary, tuple(folder / name for name in members))
-        shutil.move(temporary, destination)
-        return destination
+        return publish(temporary, destination)
 
 
 def windows(args, base: Path, output: Path, snapshot, version: str) -> Path:
@@ -387,13 +433,11 @@ def windows(args, base: Path, output: Path, snapshot, version: str) -> Path:
             if not source.is_dir() or source.is_symlink():
                 raise ValueError(f"Expected Windows payload directory missing: {name}")
             source.rename(payload / name)
-        for name, data in snapshot.items():
-            if name.endswith(".py"):
-                destination = payload / "app" / name
-                if not destination.is_file() or destination.is_symlink():
-                    raise ValueError(f"Expected Windows source missing: {name}")
-                destination.write_bytes(data)
-        return build_windows(folder, payload, output, version, str(args.makensis.resolve()))
+        write_app_files(payload / "app", {name: data for name, data in snapshot.items() if name.endswith(".py")})
+        built = folder / "built"
+        built.mkdir()
+        artifact = build_windows(folder, payload, built, version, str(args.makensis.resolve()))
+        return publish(artifact, output / artifact.name)
 
 
 def compatible_baseline(tag: str):
