@@ -26,7 +26,7 @@ if ldd /opt/yeobaek/client/flet | grep 'not found'; then
     exit 1
 fi
 bundled_python=/opt/yeobaek/python/bin/python3.12
-"$bundled_python" -I "$smoke_script" seed --app /opt/yeobaek/app --data "$fixture_folder"
+"$bundled_python" -B -I "$smoke_script" seed --app /opt/yeobaek/app --data "$fixture_folder"
 export YEOBAEK_DATA_DIR="$fixture_folder" LIBGL_ALWAYS_SOFTWARE=1
 export YEOBAEK_SMOKE_LOG="$RUNNER_TEMP/yeobaek-gui.log"
 xvfb-run -a bash -euo pipefail -s -- "$bundled_python" "$smoke_script" "$fixture_folder" <<'UI'
@@ -48,7 +48,7 @@ sleep 1
 xdotool type --clearmodifiers --delay 30 'Linux installer saved note'
 xdotool key --clearmodifiers ctrl+s
 sleep 1
-"$bundled_python" -I "$smoke_script" preserved --data "$fixture_folder" \
+"$bundled_python" -B -I "$smoke_script" preserved --data "$fixture_folder" \
     --saved-title 'Linux installer saved note'
 printf 'Verified installed Linux GUI created and saved a note through keyboard shortcuts.\n'
 UI
@@ -56,7 +56,7 @@ sudo apt-get remove -y yeobaek
 test ! -e /opt/yeobaek/app/main.py
 python3 "$smoke_script" preserved --data "$fixture_folder" --saved-title 'Linux installer saved note'
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$download_folder/$asset_name"
-"$bundled_python" -I "$smoke_script" check --app /opt/yeobaek/app --data "$fixture_folder"
+"$bundled_python" -B -I "$smoke_script" check --app /opt/yeobaek/app --data "$fixture_folder"
 sudo apt-get remove -y yeobaek
 python3 "$smoke_script" preserved --data "$fixture_folder" --saved-title 'Linux installer saved note'
 printf 'Verified Linux install, native GUI save, uninstall, reinstall and external note preservation.\n'

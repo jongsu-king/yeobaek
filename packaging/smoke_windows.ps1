@@ -34,14 +34,23 @@ function Uninstall-Yeobaek {
     if ($remove.ExitCode -ne 0) { throw "Uninstaller failed with $($remove.ExitCode)." }
     $deadline = (Get-Date).AddSeconds(60)
     while ((Test-Path $installation) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-    if (Test-Path $installation) { throw 'Owned installation directory remained after uninstall.' }
+    if (Test-Path $installation) {
+        $remainingFiles = @(Get-ChildItem -LiteralPath $installation -File -Recurse -Force)
+        $cacheFiles = @($remainingFiles | Where-Object { $_.FullName -match '\\__pycache__\\' -and $_.Extension -eq '.pyc' })
+        Write-Output "Remaining installation files: $($remainingFiles.Count), Python cache files: $($cacheFiles.Count)."
+        $remainingFiles | Sort-Object { $_.FullName -match '\\__pycache__\\' }, FullName | Select-Object -First 60 | ForEach-Object {
+            Write-Output $_.FullName.Substring($installation.Length + 1)
+        }
+        python -B $smokeScript preserved --data $fixtureFolder
+        throw 'Owned installation directory remained after uninstall.'
+    }
     python $smokeScript preserved --data $fixtureFolder
     if ($LASTEXITCODE -ne 0) { throw 'External note preservation failed.' }
 }
 
 Install-Yeobaek
 $bundledPython = Join-Path $installation 'python\python.exe'
-& $bundledPython -I $smokeScript seed --app (Join-Path $installation 'app') --data $fixtureFolder
+& $bundledPython -B -I $smokeScript seed --app (Join-Path $installation 'app') --data $fixtureFolder
 if ($LASTEXITCODE -ne 0) { throw 'Installed runtime smoke failed.' }
 
 $env:YEOBAEK_DATA_DIR = $fixtureFolder
@@ -71,7 +80,7 @@ try {
 
 Uninstall-Yeobaek
 Install-Yeobaek
-& $bundledPython -I $smokeScript check --app (Join-Path $installation 'app') --data $fixtureFolder
+& $bundledPython -B -I $smokeScript check --app (Join-Path $installation 'app') --data $fixtureFolder
 if ($LASTEXITCODE -ne 0) { throw 'Reinstalled runtime could not recover the existing note.' }
 Uninstall-Yeobaek
 Write-Output 'Verified Windows install, native launch, normal close, uninstall, reinstall and external note preservation.'

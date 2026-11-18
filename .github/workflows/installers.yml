@@ -7,6 +7,11 @@ on:
         description: Published release to install
         required: true
         default: v0.3.1
+      platform:
+        description: Installer platform
+        type: choice
+        options: [all, windows, linux]
+        default: all
   release:
     types: [published]
 
@@ -15,6 +20,7 @@ permissions:
 
 jobs:
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'linux'
     name: Windows x64 install and uninstall
     runs-on: windows-latest
     timeout-minutes: 15
@@ -28,6 +34,7 @@ jobs:
         run: ./packaging/smoke_windows.ps1
 
   linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'windows'
     name: Linux AMD64 install and uninstall
     runs-on: ubuntu-24.04
     timeout-minutes: 15
