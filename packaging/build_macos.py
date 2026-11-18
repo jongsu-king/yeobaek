@@ -33,7 +33,7 @@ def set_bundle_version(app: Path, version: str, build_number: str | None = None)
 
 
 def build(output: Path, work_dir: Path | None = None, build_number: str | None = None) -> Path:
-    version = tomllib.loads((PROJECT / "pyproject.toml").read_text())["project"]["version"]
+    version = tomllib.loads((PROJECT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if work_dir is not None:
