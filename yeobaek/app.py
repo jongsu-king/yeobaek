@@ -104,6 +104,7 @@ class Workspace:
         self.editor_values = ("", "")
         self.draft = None
         self.save_task = None
+        self.closing = False
         self.view = "all"
         self.stage = "list"
         self.previewing = False
@@ -561,6 +562,16 @@ class Workspace:
         self.editor_state.value = "수정 충돌 · 노트 메뉴에서 버전 보기" if self.store.conflicts(note_id) else "이 기기에 저장됨"
         self.page.update()
         return True
+
+    async def window_event(self, event):
+        if event.type != ft.WindowEventType.CLOSE or self.closing:
+            return
+        self.closing = True
+        try:
+            if await self.save():
+                await self.page.window.destroy()
+        finally:
+            self.closing = False
 
     async def patch(self, patch):
         if not self.note or not await self.save():
@@ -1438,6 +1449,9 @@ class Workspace:
         self.page.on_resize = self.update_layout
         self.page.on_keyboard_event = self.keyboard
         self.page.on_app_lifecycle_state_change = self.save
+        if self.page.platform not in MOBILE:
+            self.page.window.prevent_close = True
+            self.page.window.on_event = self.window_event
         self.refresh_data()
         first = self.matches()
         self.selected_id = first[0]["id"] if first else None

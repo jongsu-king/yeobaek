@@ -8,18 +8,20 @@
 
 ∑ 버튼으로 LaTeX를 삽입하거나, 본문에 `$E=mc^2$`처럼 작성하세요. 여러 줄 수식은 시작과 끝에 `$$`를 각각 별도 줄에 적습니다. **미리보기**를 누르면 수식이 렌더링됩니다.
 
+0.3.1에서는 데스크톱 창을 닫을 때 대기 중인 편집 내용을 먼저 저장합니다. 저장에 실패하면 창과 입력 내용을 유지해 다시 저장할 수 있습니다. 첨부 전송 중 Google 인증이 만료되면 기존 모바일 로그인 갱신 처리를 거쳐 다시 동기화합니다. 행·열 범위를 잘못 기록한 Excel 파일과 CP949 한글 CSV·TSV, 긴 셀의 미리보기도 개선했습니다.
+
 ## 설치 파일
 
-[GitHub v0.3.0 릴리스](https://github.com/jongsu-king/yeobaek/releases/tag/v0.3.0)에서 운영체제에 맞는 파일을 받으세요. 함께 제공하는 `SHA256SUMS.txt`로 다운로드한 파일의 SHA-256을 확인할 수 있습니다.
+[GitHub 최신 릴리스](https://github.com/jongsu-king/yeobaek/releases/latest)에서 운영체제에 맞는 파일을 받으세요. 함께 제공하는 `SHA256SUMS.txt`로 다운로드한 파일의 SHA-256을 확인할 수 있습니다.
 
 | 플랫폼 | 파일 | 확인한 범위 |
 |---|---|---|
-| macOS Apple Silicon | `Yeobaek-0.3.0-macOS-arm64.zip` | 압축을 풀어 `Yeobaek.app` 실행. 앱 실행·저장과 PDF 페이지 표시 확인. Apple 공증 미실행 |
-| Android ARM64 | `Yeobaek-0.3.0-Android-arm64.apk` | Android 7.0 이상. 테스트 인증서 서명·무결성 확인, 실기기 실행 미검증 |
-| Windows x64 | `Yeobaek-0.3.0-Windows-x64-Setup.exe` | 설치 파일 구조 확인, Windows 실행 미검증. 코드 서명 없음 |
-| Debian·Ubuntu ARM64 | `yeobaek_0.3.0_arm64.deb` | Ubuntu 24.04 가상 머신에서 설치·앱 실행·새 노트 저장 확인 |
-| Debian·Ubuntu AMD64 | `yeobaek_0.3.0_amd64.deb` | 패키지 구조 확인, 해당 아키텍처에서 실행 미검증 |
-| iOS 시뮬레이터 ARM64 | `Yeobaek-0.3.0-iOS-Simulator-arm64.zip` | iPhone 17 Pro / iOS 26.4 시뮬레이터에서 앱 실행·PDF 이미지와 페이지 이동 확인 |
+| macOS Apple Silicon | `Yeobaek-0.3.1-macOS-arm64.zip` | 압축을 풀어 `Yeobaek.app` 실행. Apple 공증 미실행 |
+| Android ARM64 | `Yeobaek-0.3.1-Android-arm64.apk` | Android 7.0 이상. 테스트 인증서 서명·무결성 확인, 실기기 실행 미검증 |
+| Windows x64 | `Yeobaek-0.3.1-Windows-x64-Setup.exe` | 설치 파일 구조 확인, Windows 실행 미검증. 코드 서명 없음 |
+| Debian·Ubuntu ARM64 | `yeobaek_0.3.1_arm64.deb` | 0.3.0을 Ubuntu 24.04 가상 머신에서 설치·실행·저장 확인 |
+| Debian·Ubuntu AMD64 | `yeobaek_0.3.1_amd64.deb` | 패키지 구조 확인, 해당 아키텍처에서 실행 미검증 |
+| iOS 시뮬레이터 ARM64 | `Yeobaek-0.3.1-iOS-Simulator-arm64.zip` | 0.3.0을 iOS 26.4 시뮬레이터에서 설치·PDF 페이지 이동 확인 |
 
 iPhone 실기기용 설치 파일은 Apple 서명 인증서와 프로비저닝 프로파일이 있어야 만들 수 있습니다. Android와 iPhone 실기기 간 Drive 동기화는 미검증입니다. Mac과 Ubuntu 가상 머신 사이에서는 실제 Google Drive로 PDF·Excel을 양방향 전송해 원본 바이트, PDF 이미지와 Excel 셀을 확인했습니다.
 

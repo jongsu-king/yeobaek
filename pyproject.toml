@@ -1,6 +1,6 @@
 [project]
 name = "yeobaek"
-version = "0.3.0"
+version = "0.3.1"
 description = "Google Drive 동기화를 지원하는 개인 노트 앱"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -25,7 +25,7 @@ company = "Yeobaek"
 
 [tool.flet.app]
 path = "."
-exclude = [".venv", "mobile_auth", "packaging", "build", "dist", ".git", "client_secret*.json", "__pycache__"]
+exclude = [".venv", "mobile_auth", "packaging", "tests", "build", "dist", ".git", "client_secret*.json", "__pycache__"]
 
 [tool.flet.android]
 dependencies = ["yeobaek-mobile-auth"]

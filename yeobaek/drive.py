@@ -611,6 +611,8 @@ class DriveSession:
                 digest = properties.get(ATTACHMENT_DIGEST_PROPERTY)
                 if isinstance(digest, str):
                     remote.setdefault(digest, []).append(file)
+        except AuthenticationError:
+            raise
         except DriveError:
             return len(referenced)
 
@@ -623,8 +625,10 @@ class DriveSession:
                         self._upload_attachment(account_key, digest, local[digest])
                 elif not self._download_attachment(digest, files):
                     unavailable += 1
+            except AuthenticationError:
+                raise
             except DriveError as error:
-                if error.retryable or isinstance(error, AuthenticationError):
+                if error.retryable:
                     return unavailable + len(referenced) - index
                 unavailable += 1
         return unavailable

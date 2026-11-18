@@ -12,6 +12,7 @@ from itertools import islice
 from pathlib import Path
 
 _PDFIUM_LOCK = threading.Lock()
+_CSV_LOCK = threading.Lock()
 _XLSX = {".xlsx", ".xlsm", ".xltx", ".xltm"}
 _IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 _TEXT = {".txt", ".md", ".markdown", ".log", ".json", ".yaml", ".yml", ".xml", ".py", ".r", ".tex", ".ini", ".toml"}
@@ -125,17 +126,19 @@ def _xlsx_page(data, sheet, row, column):
             raise ValueError("이 Excel 파일은 미리보기에 펼치기에는 너무 큽니다. 원본 파일로 열어 주세요.")
     book = load_workbook(io.BytesIO(data), read_only=True, data_only=False, keep_links=False)
     try:
-        names = book.sheetnames
+        names = [worksheet.title for worksheet in book.worksheets]
+        if not names:
+            raise ValueError("이 Excel 파일에 표시할 수 있는 표 시트가 없습니다.")
         worksheet = book[names[min(sheet, len(names) - 1)]]
-        column_count = worksheet.max_column or (column + SHEET_COLUMNS)
-        last_row = min(row + SHEET_ROWS + 1, worksheet.max_row or row + SHEET_ROWS + 1)
-        rows = worksheet.iter_rows(
-            min_row=row + 1, max_row=last_row,
-            min_col=column + 1, max_col=min(column + SHEET_COLUMNS, max(column_count, column + 1)),
-            values_only=True,
-        )
-        # A worksheet without a reported dimension lets the generator determine its last row.
-        return _sheet_result(names, rows, column_count, row, column)
+        # Producers may omit dimensions or report A1:A1 despite writing more cells.
+        # Read one bounded row page from the actual XML before slicing its columns.
+        worksheet.reset_dimensions()
+        rows = list(worksheet.iter_rows(
+            min_row=row + 1, max_row=row + SHEET_ROWS + 1, values_only=True,
+        ))
+        column_count = max((len(values) for values in rows), default=0)
+        visible = (values[column:column + SHEET_COLUMNS] for values in rows)
+        return _sheet_result(names, visible, column_count, row, column)
     finally:
         book.close()
 
@@ -163,12 +166,26 @@ def sheet_page(name, data, sheet=0, row=0, column=0):
     if ext == ".xls":
         return _xls_page(data, sheet, row, column)
     delimiter = "\t" if ext == ".tsv" else ","
-    encoding = "utf-16" if data.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig"
-    with io.TextIOWrapper(io.BytesIO(data), encoding=encoding, newline="") as stream:
-        rows = list(islice(csv.reader(stream, delimiter=delimiter), row, row + SHEET_ROWS + 1))
-        width = max((len(values) for values in rows), default=0)
-        visible = (values[column:column + SHEET_COLUMNS] for values in rows)
-        return _sheet_result((), visible, width, row, column)
+    encodings = ("utf-16",) if data.startswith((b"\xff\xfe", b"\xfe\xff")) else ("utf-8-sig", "cp949")
+    # csv's field limit is process-wide. Restore it even after malformed input,
+    # while allowing a long cell within an already size-limited attachment.
+    with _CSV_LOCK:
+        previous_limit = csv.field_size_limit()
+        try:
+            csv.field_size_limit(max(previous_limit, len(data)))
+            for encoding in encodings:
+                try:
+                    with io.TextIOWrapper(io.BytesIO(data), encoding=encoding, newline="") as stream:
+                        rows = list(islice(csv.reader(stream, delimiter=delimiter), row, row + SHEET_ROWS + 1))
+                    break
+                except UnicodeDecodeError:
+                    if encoding == encodings[-1]:
+                        raise ValueError("CSV·TSV 파일의 문자 인코딩을 읽을 수 없습니다. UTF-8로 저장해 주세요.") from None
+        finally:
+            csv.field_size_limit(previous_limit)
+    width = max((len(values) for values in rows), default=0)
+    visible = (values[column:column + SHEET_COLUMNS] for values in rows)
+    return _sheet_result((), visible, width, row, column)
 
 
 def spreadsheet_column(number):
