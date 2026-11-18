@@ -21,6 +21,17 @@ sudo apt install ./yeobaek_0.3.0_amd64.deb
 
 [Flet 릴리스](https://github.com/flet-dev/flet/releases/tag/v1.1.2) · [Python 런타임 릴리스](https://github.com/astral-sh/python-build-standalone/releases/tag/20261110) · [NSIS](https://nsis.sourceforge.io/)
 
+## macOS Apple Silicon
+
+기존 Flet·PyInstaller 환경에서 다음 명령을 실행하면 `pyproject.toml` 버전의 ARM64 ZIP을 만듭니다. `--build-number`를 생략하면 번들 빌드 번호에도 프로젝트 버전을 사용합니다.
+
+```sh
+uv pip install pyinstaller
+uv run python packaging/build_macos.py --build-number 3
+```
+
+메인 소스와 아이콘의 절대 경로를 사용해 임시 폴더에서 빌드하고, 바깥 앱 번들의 버전 정보를 보정한 뒤 임시 서명과 엄격한 서명 검사를 수행합니다. PDFium 수집 옵션은 유지합니다. 완성한 ZIP은 출력 폴더에 원자적으로 게시하며 기존 `dist/Yeobaek.app`을 교체하지 않습니다. 작업 위치는 `--work-dir`, 출력 위치는 `--output`으로 지정합니다.
+
 ## Python 코드 수정판 만들기
 
 Python 코드만 수정한 릴리스는 `refresh_release.py`로 검증된 이전 설치 파일의 네이티브 런타임을 재사용합니다. Git 태그가 있는 소스 체크아웃과 Python 3.12가 필요합니다. `pyproject.toml`의 버전을 먼저 올리고, 이전 릴리스 파일과 체크섬을 별도 폴더에 준비하세요. 스크립트는 기준 태그와 의존성·Flutter 확장을 비교하고, 변경된 경우 전체 빌드를 요구합니다.
