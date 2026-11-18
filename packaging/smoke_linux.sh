@@ -20,7 +20,7 @@ gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
 )
 sudo apt-get update -qq
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    "$download_folder/$asset_name" xvfb xauth xdotool libgl1-mesa-dri fonts-noto-cjk
+    "$download_folder/$asset_name" xvfb xauth xdotool libgl1-mesa-dri
 test "$(dpkg-query -W -f='${Version}' yeobaek)" = "$release_version"
 if ldd /opt/yeobaek/client/flet | grep 'not found'; then
     exit 1
