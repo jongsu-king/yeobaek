@@ -12,7 +12,7 @@
 
 0.4.0에서는 **노트 메뉴 → 첨부와 함께 ZIP 내보내기**로 Markdown과 첨부 원본을 함께 보관할 수 있습니다. 압축을 풀면 `note.md`가 `attachments/`의 파일을 상대 경로로 참조합니다. 파일이 누락되거나 손상되면 내보내기 전에 알립니다. PDF·이미지는 확대·축소·이동과 확대 초기화를 지원합니다.
 
-**노트 메뉴 → 본문에서 찾기** 또는 `Ctrl/Cmd+F`로 현재 본문을 검색합니다. 검색창에서 Enter를 누르면 일치하는 본문을 선택합니다. 다음·이전 버튼, F3·Shift+F3 또는 `Ctrl/Cmd+G`·`Ctrl/Cmd+Shift+G`로 이동하고 Escape로 닫습니다. 백업·파일 저장은 임시 파일을 완성한 뒤 교체하며, 첨부 원본을 읽을 때 무결성을 확인합니다. 손상된 로컬 첨부는 보존하고, 다음 동기화에서 정상 원본이 있으면 받아 복구합니다.
+**노트 메뉴 → 본문에서 찾기** 또는 `Ctrl/Cmd+F`로 현재 본문을 검색합니다. 검색창에서 Enter를 누르면 일치하는 본문을 선택합니다. 다음·이전 버튼, F3·Shift+F3 또는 `Ctrl/Cmd+G`·`Ctrl/Cmd+Shift+G`로 이동하고 Escape로 닫습니다. 데스크톱의 백업·파일 저장은 임시 파일을 완성한 뒤 교체하며, 첨부 원본을 읽을 때 무결성을 확인합니다. 손상된 로컬 첨부는 보존하고, 다음 동기화에서 정상 원본이 있으면 받아 복구합니다.
 
 ## 설치 파일
 
@@ -20,12 +20,14 @@
 
 | 플랫폼 | 파일 | 확인한 범위 |
 |---|---|---|
-| macOS Apple Silicon | `Yeobaek-0.4.0-macOS-arm64.zip` | 압축을 풀어 `Yeobaek.app` 실행. Apple 공증 미실행 |
-| Android ARM64 | `Yeobaek-0.4.0-Android-arm64.apk` | Android 7.0 이상. 테스트 인증서 서명·무결성 확인, 실기기 실행 미검증 |
-| Windows x64 | `Yeobaek-0.4.0-Windows-x64-Setup.exe` | 설치 파일 구조 확인, Windows 실행 미검증. 코드 서명 없음 |
+| macOS Apple Silicon | `Yeobaek-0.4.0-macOS-arm64.zip` | 0.4.0 프로세스 시작·포함 코드·버전·서명 확인. 새 버튼 직접 클릭 미검증, Apple 공증 없음 |
+| Android ARM64 | `Yeobaek-0.4.0-Android-arm64.apk` | Android 7.0 이상. Android 14 ARM64 에뮬레이터에서 0.3.1→0.4.0 업데이트·데이터 보존·재실행 확인. 테스트 서명, 실기기 미검증 |
+| Windows x64 | `Yeobaek-0.4.0-Windows-x64-Setup.exe` | 0.4.0 설치·네이티브 창·정상 종료·제거·재설치·외부 데이터 보존 확인. 코드 서명 없음 |
 | Debian·Ubuntu ARM64 | `yeobaek_0.4.0_arm64.deb` | 0.3.0을 Ubuntu 24.04 가상 머신에서 설치·실행·저장 확인 |
-| Debian·Ubuntu AMD64 | `yeobaek_0.4.0_amd64.deb` | 패키지 구조 확인, 해당 아키텍처에서 실행 미검증 |
-| iOS 시뮬레이터 ARM64 | `Yeobaek-0.4.0-iOS-Simulator-arm64.zip` | 0.3.0을 iOS 26.4 시뮬레이터에서 설치·PDF 페이지 이동 확인 |
+| Debian·Ubuntu AMD64 | `yeobaek_0.4.0_amd64.deb` | 0.4.0 Ubuntu 24.04 AMD64 설치·GUI 노트 저장·제거·재설치·외부 데이터 보존 확인 |
+| iOS 시뮬레이터 ARM64 | `Yeobaek-0.4.0-iOS-Simulator-arm64.zip` | 0.4.0 코드·버전·서명 확인. 0.3.0은 iOS 26.4 시뮬레이터에서 설치·PDF 페이지 이동 확인 |
+
+0.4.0의 회귀 검사 72개는 Windows·macOS·Linux Python 3.12에서 각각 통과했습니다. Windows·Linux에 실제 설치된 코드로 첨부 ZIP의 상대 링크·원본 바이트·파일 저장과 PDF 이미지·Excel 셀도 확인했습니다. [검증 기록과 범위](packaging/VALIDATION-0.4.0.md)
 
 iPhone 실기기용 설치 파일은 Apple 서명 인증서와 프로비저닝 프로파일이 있어야 만들 수 있습니다. Android와 iPhone 실기기 간 Drive 동기화는 미검증입니다. Mac과 Ubuntu 가상 머신 사이에서는 실제 Google Drive로 PDF·Excel을 양방향 전송해 원본 바이트, PDF 이미지와 Excel 셀을 확인했습니다.
 
@@ -71,7 +73,7 @@ uv run python main.py
 | iOS 시뮬레이터 | `uv run flet build ios-simulator` |
 | iPhone·iPad | Apple 개발자 팀과 서명 설정 후 `uv run flet build ipa` |
 
-Mac의 PyInstaller 패키징 방법은 `uv pip install pyinstaller` 후 `uv run flet pack main.py --name Yeobaek --icon assets/icon.icns --bundle-id io.github.jongsuking.yeobaek --product-version 0.4.0 --yes -- --collect-all pypdfium2_raw`입니다. Python 코드 수정판은 [기존 네이티브 런타임을 재사용하는 패키징 도구](packaging/README.md#python-코드-수정판-만들기)로 만들 수도 있습니다.
+Mac의 PyInstaller 패키징 방법은 `uv pip install pyinstaller` 후 `uv run python packaging/build_macos.py --build-number 3`입니다. 이 도구는 격리된 폴더에서 빌드하고 앱 번들의 버전 정보를 보정하며 PDFium을 포함해 서명을 확인합니다. Python 코드 수정판은 [기존 네이티브 런타임을 재사용하는 패키징 도구](packaging/README.md#python-코드-수정판-만들기)로 만들 수도 있습니다.
 
 ## 구현 참고
 

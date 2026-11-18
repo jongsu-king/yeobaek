@@ -14,7 +14,7 @@ Windows 10·11 x64에서는 `Yeobaek-…-Windows-x64-Setup.exe`를 실행한 뒤
 Ubuntu 22.04와 Debian 12 이상에서는 컴퓨터의 아키텍처에 맞는 패키지를 고르세요. `apt`가 GUI 실행에 필요한 시스템 패키지를 설치합니다. 설치 후 앱 메뉴에서 **Yeobaek**을 엽니다.
 
 ```sh
-sudo apt install ./yeobaek_0.3.0_amd64.deb
+sudo apt install ./yeobaek_0.4.0_amd64.deb
 ```
 
 구글 드라이브에 연결할 때는 데스크톱 OAuth JSON을 선택하세요. 계정 설정과 메모는 앱을 실행할 기기에서 관리합니다. [Google Drive 설정 안내](../README.md#google-drive-설정)
@@ -61,10 +61,10 @@ python3.12 packaging/refresh_release.py android \
 
 ## 설치 파일 검사
 
-GitHub의 `Installer smoke tests` 워크플로는 정식 릴리스 게시 시 Windows x64와 Ubuntu AMD64에서 설치·앱 실행·제거·재설치를 검사합니다. 설치 폴더 밖에 만든 합성 노트와 첨부 파일이 보존되는지 확인하고, 설치된 Python으로 PDF 이미지와 Excel 셀도 확인합니다. Linux는 키보드로 새 노트를 작성하고 저장합니다. 직접 실행할 때는 검사할 태그를 지정하세요.
+GitHub의 `Installer smoke tests` 워크플로는 릴리스 게시 시 Windows x64와 Ubuntu AMD64에서 설치·앱 실행·제거·재설치를 검사합니다. 설치 폴더 밖에 만든 합성 노트와 첨부 파일이 보존되는지 확인하고, 설치된 Python으로 PDF 이미지와 Excel 셀도 확인합니다. 0.4.0부터 설치된 ZIP 내보내기 모듈의 상대 링크·원본 바이트·원자적 저장도 검사합니다. Linux는 키보드로 새 노트를 작성하고 저장합니다. 직접 실행할 때는 검사할 태그를 지정하세요.
 
 ```sh
-gh workflow run installers.yml -f release_tag=v0.3.1
+gh workflow run installers.yml -f release_tag=v0.4.0
 ```
 
 `v0.4.0-rc.1`처럼 사전 릴리스 태그도 지정할 수 있습니다. 이때 다운로드 태그는 그대로 사용하고 설치 파일 이름과 설치 버전은 `0.4.0`으로 검사합니다.
