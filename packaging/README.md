@@ -20,3 +20,28 @@ sudo apt install ./yeobaek_0.3.0_amd64.deb
 구글 드라이브에 연결할 때는 데스크톱 OAuth JSON을 선택하세요. 계정 설정과 메모는 앱을 실행할 기기에서 관리합니다. [Google Drive 설정 안내](../README.md#google-drive-설정)
 
 [Flet 릴리스](https://github.com/flet-dev/flet/releases/tag/v1.1.2) · [Python 런타임 릴리스](https://github.com/astral-sh/python-build-standalone/releases/tag/20261110) · [NSIS](https://nsis.sourceforge.io/)
+
+## Python 코드 수정판 만들기
+
+Python 코드만 수정한 릴리스는 `refresh_release.py`로 검증된 이전 설치 파일의 네이티브 런타임을 재사용합니다. Git 태그가 있는 소스 체크아웃과 Python 3.12가 필요합니다. `pyproject.toml`의 버전을 먼저 올리고, 이전 릴리스 파일과 체크섬을 별도 폴더에 준비하세요. 스크립트는 기준 태그와 의존성·Flutter 확장을 비교하고, 변경된 경우 전체 빌드를 요구합니다.
+
+```sh
+python3.12 packaging/refresh_release.py linux-amd64 linux-arm64 \
+  --base-version 0.3.0 --base-dir /path/to/0.3.0 --output dist
+```
+
+기준 체크섬은 `SHA256SUMS-0.3.0.txt`, `SHA256SUMS.txt` 순서로 찾습니다. `--baseline-checksums /path/to/checksums.txt`로 직접 지정할 수도 있습니다. 새 파일의 SHA-256과 사용한 원본·소스의 SHA-256은 실행 결과에 출력됩니다.
+
+- `ios-simulator` 대상은 macOS의 `ditto`·`codesign`을 사용해 Python 코드와 버전을 갱신하고 임시 서명을 다시 적용합니다.
+- `windows` 대상에는 `--sevenzip /path/to/7zz --makensis /path/to/makensis`를 지정합니다. NSIS를 별도 폴더에 풀어 사용하면 그 폴더의 `share/nsis`를 `NSISDIR` 환경 변수로 설정하세요.
+- `android` 대상에는 공식 Android SDK build-tools 폴더와 기존 앱의 서명 키가 필요합니다. JDK를 `JAVA_HOME`에, 키스토어·키 비밀번호를 `YEOBAEK_ANDROID_STORE_PASSWORD` 환경 변수에 설정하세요. 아래 명령의 versionCode는 이전 APK보다 큰 정수여야 합니다. 새 APK의 인증서가 기존 APK와 같은지, 16 KiB 정렬과 패키지 버전을 확인한 뒤 결과물을 저장합니다.
+
+```sh
+python3.12 packaging/refresh_release.py android \
+  --base-version 0.3.0 --base-dir /path/to/0.3.0 --output dist \
+  --android-tools /path/to/android-sdk/build-tools/36.0.0 \
+  --android-version-code 2 --keystore /path/to/keystore \
+  --key-alias androiddebugkey
+```
+
+키스토어와 비밀번호는 저장소에 커밋하지 마세요. 배포 파일을 확인한 뒤 새 릴리스용 `SHA256SUMS.txt`를 생성합니다.
